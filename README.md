@@ -13,6 +13,7 @@ To display command line options:
 To compile (Optional) (requires java development kit - adjust path to java development kit as needed):
 
   "\Program Files\Java\jdk1.8.0_151\bin\javac.exe" Piano.java
+  
   "\Program Files\Java\jdk1.8.0_151\bin\jar.exe" uvfe piano.jar Piano Piano*.class
 
 
