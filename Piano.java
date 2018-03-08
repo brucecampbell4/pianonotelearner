@@ -20,6 +20,13 @@
 
 */
 
+/*
+A Java program to help learn sight reading music. Displays random notes, which
+you play on an attached midi keyboard. Shows speed and accuracy. You can also
+enter letters a,b,c,d,e,f,g on the computer keyboard, to help with learning 
+the names of the notes.
+*/
+
 import javax.swing.JFrame;
 import javax.swing.JPanel;
 import javax.swing.ImageIcon;
@@ -60,7 +67,7 @@ public class Piano {
     static String[] keynames = { "C", "F", "B\u266D", "E\u266D", "A\u266D", "D\u266D", "G\u266D", "C\u266D", "G", "D", "A", "E", "B", "F\u266F", "C\u266F" };
     static int[] keyw = { 0,0,0,0,0,0,0,0,1,1,1,1,1,1,1 };
     static int[] keyn = { 0,1,2,3,4,5,6,7,1,2,3,4,5,6,7 };
-    static int[][] chordtypes = { { 0 }, { 0, 2 }, { 0, 3 }, { 0, 4 }, { 0, 5 }, { 0, 6 }, { 0, 7 }, { 0, 2, 4 }, { 0, 2, 5 }, { 0, 3, 5 }, { 0, 2, 4, 6 } };
+    static int[][] chordtypes = { { 0 }, { 0, 1 }, { 0, 2 }, { 0, 3 }, { 0, 4 }, { 0, 5 }, { 0, 6 }, { 0, 7 }, { 0, 2, 4 }, { 0, 2, 5 }, { 0, 3, 5 }, { 0, 2, 4, 6 } };
     static int[][] selectchords = new int[2][100];
     static int[] nchords = { 0, 0 };
     static int[] chordoption = { 0, 0 };
@@ -113,6 +120,12 @@ public class Piano {
     static Boolean[] reverserun = new Boolean[2];
     static int[] lastnote = new int[2];
     static Boolean[] okrepeats = new Boolean[2];
+
+    private static class noteval {
+        public int note = -1;
+        public int len = -1;
+        public int acc = 0;
+    }
 
     private static void ChooseChordOption( int staffn, int x ) {
         if( staffn < 0 )
@@ -179,12 +192,12 @@ public class Piano {
         scaled = save_scaled;
     }
 
-    private static void PlayChord( int[][][][] chords, int gstaff, int zzz, int sharpenorflatten[], int transposed, boolean play ) {
+    private static void PlayChord( noteval[][][][] chords, int gstaff, int zzz, int sharpenorflatten[], int transposed, boolean play ) {
         int noteno;
 
         for( int staffn=0; staffn<chords[gstaff].length; staffn++ ) {    
             for( int m=0; m<chords[gstaff][staffn][zzz].length; m++ ) {
-                noteno = chords[gstaff][staffn][zzz][m];
+                noteno = chords[gstaff][staffn][zzz][m].note;
                 if( noteno == -1 ) continue;
                 notenum = GetNoteNumber( noteno ) + sharpenorflatten[ noteno%7 ];
                 if( play )
@@ -195,18 +208,60 @@ public class Piano {
         }
     }
 
-    private static void DrawChordOnStaff( BufferedImage bi1, Graphics2D g2d, BufferedImage bi2, Boolean darken, Boolean ledgerlines, int staffn, int[] chord, int[] sharpenorflatten, int notew, int staffy, int drawcolour ) {
+    private static void DrawChordOnStaff( BufferedImage bi1, Graphics2D g2d, BufferedImage bi2, Boolean darken, Boolean ledgerlines, int staffn, noteval[] chord, int[] sharpenorflatten, int notew, int staffy, int drawcolour ) {
         int noteno;
         int minnoteno = 10000;
         int maxnoteno = -1;
-
+        int tm = 0;
+        int[] testchord = new int[64];
+        int[] shifth = new int[64];
+        int noteshift;
+        Boolean shifted = false;
+ 
         g2d.setPaint( new Color( drawcolour ) );
 
+        for( int m=0; m<chord.length; m++ )
+             if( chord[m].note != -1 ) {
+                 testchord[tm] = chord[m].note;
+                 shifth[tm] = 0;
+                 tm++;
+             }
+
+        if( tm > 1 ) {
+            Arrays.sort( testchord, 0, tm );
+            int minnote = testchord[0];
+            int even = 0;
+            int odd = 0;
+            for( int i=0; i<tm; i++ )
+                if( ((testchord[i]-minnote) % 2) == 0 ) even++;
+            odd = tm-even;
+            for( int i=0; i<(tm-1); i++ ) {
+                if( testchord[i] == testchord[i+1]-1 ) {
+                    if( (((testchord[i]-minnote)%2) == 0) && (even >= odd) ) {
+                        shifth[i] = testchord[i+1];
+                        i++;
+                    }
+                    else {
+                        shifth[i] = testchord[i];
+                    }
+                }
+            }
+        }
+
         for( int m=0; m<chord.length; m++ ) {
-            noteno = chord[m];
+            noteno = chord[m].note;
             if( noteno != -1 ) {
                 if( sharpenorflatten[m] != 0 ) DrawOneNoteOnStaff( bi1, sharpbi, true, false, staffn, noteno, notew-20/scaled, staffy+(linespace/2-accyoff[1])/scaled, drawcolour );
-                DrawOneNoteOnStaff( bi1, notebi[usenote], true, true, staffn, noteno, notew, staffy, drawcolour );
+                noteshift = 0;
+                for( int z=0; z<tm; z++ ) {
+                    if( shifth[z] == noteno ) {
+                        noteshift = notebi[usenote].getWidth()-1;
+                        if( usenote == 0 ) noteshift -= 2;    // whole note
+                        shifted = true;
+                        break;
+                    }
+                }
+                DrawOneNoteOnStaff( bi1, notebi[usenote], true, true, staffn, noteno, notew+noteshift, staffy, drawcolour );
                 if( noteno > maxnoteno ) maxnoteno = noteno;
                 if( noteno < minnoteno ) minnoteno = noteno;
             }
@@ -219,15 +274,15 @@ public class Piano {
             int xoff = 0;
             int yoff = (2*notebi[usenote].getWidth()/3);
             int elen = (maxnoteno-minnoteno)*linespace/2;
-            if( fnote < midnote ) {
+            if( fnote < midnote )
                yoff = (notebi[usenote].getHeight()/3)-(50+elen)/scaled;
+            if( (fnote < midnote) || shifted )
                xoff = notebi[usenote].getWidth() - Math.max(1,2/scaled);
-            }
             g2d.fillRect( notew+xoff, noteloc+yoff, Math.max(1,2/scaled), (50+elen)/scaled );
         }  
     }
 
-    private static void DrawNotesOnStaff( BufferedImage bi1, Graphics2D g2d, int notesperstaff, int[][][][] chords, int gstaff, int notex, int staffx, int staffy ) {
+    private static void DrawNotesOnStaff( BufferedImage bi1, Graphics2D g2d, int notesperstaff, noteval[][][][] chords, int gstaff, int notex, int staffx, int staffy ) {
         int staffn;
         int notew;
 
@@ -274,7 +329,7 @@ public class Piano {
         return( loc );
     }
 
-    private static void ScrollChords( int chords[][][][] ) {
+    private static void ScrollChords( noteval chords[][][][] ) {
         for( int i=0; i<chords.length-1; i++ ) {
             for( int j=0; j<chords[0].length; j++ ) {
                 for( int k=0; k<chords[0][0].length; k++ ) {
@@ -340,7 +395,7 @@ public class Piano {
         okrepeats[staffn] = true;
     }
 
-    private static void SelectNotes( int chords[][][][], int ng, int notesperstaff, int nstaffs, int minnoten[], int maxnoten[], Random random, String donotes ) {
+    private static void SelectNotes( noteval chords[][][][], int ng, int notesperstaff, int nstaffs, int minnoten[], int maxnoten[], Random random, String donotes ) {
         String notename;
         int staffn;
         int noteno = 0;
@@ -350,7 +405,7 @@ public class Piano {
 
         for( int i=0; i<notesperstaff; i++ ) {
             for( int j=0; j<chords[0][0][0].length; j++ )
-                chords[ng][0][i][j] = chords[ng][1][i][j] = -1;
+                chords[ng][0][i][j].note = chords[ng][1][i][j].note = -1;
         }
 
         for( int i=0; i<notesperstaff; i++ ) {
@@ -408,7 +463,7 @@ public class Piano {
 
             recentnotes[ (lastnr++) % recentnotes.length ] = noteno;
             for( int j=0; j<chordtypes[ chordn ].length; j++ ) {
-                chords[ng][staffn][i][j] = noteno + chordtypes[ chordn ][j];
+                chords[ng][staffn][i][j].note = noteno + chordtypes[ chordn ][j];
             }            
             if( bothclefs && (alternatestaff == 0) ) i--;
         }
@@ -614,8 +669,8 @@ public class Piano {
         int staffy = 80;
         int staffwidth = 1200;
         int showstats = 0;
-        int notespacing = 64;
-        int minnotespacing = notespacing;
+        int notespacing;
+        int minnotespacing = 48;
         int notexstart = 0;
         int notexend = 16;
         int[] miditonote = new int[127];
@@ -632,7 +687,14 @@ public class Piano {
         int gstaffoffset = 0;
         int startwait = 0;
 
-        int chords[][][][] = new int[4][2][200][8];    // grand staffs, staffs, chords per staff, notes per chord
+//        int chords[][][][] = new int[4][2][200][8];    // grand staffs, staffs, chords per staff, notes per chord
+        noteval chords[][][][] = new noteval[4][2][200][8];    // grand staffs, staffs, chords per staff, notes per chord
+
+       for( int i=0; i<chords.length; i++ ) 
+            for( int j=0; j<chords[0].length; j++ ) 
+                for( int k=0; k<chords[0][0].length; k++ ) 
+                    for( int m=0; m<chords[0][0][0].length; m++ )  
+                       chords[i][j][k][m] = new noteval(); 
 
         String donotes = "";
 
@@ -728,12 +790,12 @@ public class Piano {
                 metronome = Integer.parseInt( args[++i] );
             else if( args[i].equals( "-run") )
                 showstats = Integer.parseInt( args[++i] );
+            else if( args[i].equals( "-notespacing") )
+                minnotespacing = Integer.parseInt( args[++i] );
             else if( args[i].equals( "-whole") )
                 usenote = 0;
-            else if( args[i].equals( "-quarter") ) {
+            else if( args[i].equals( "-quarter") )
                 usenote = 2;
-                notespacing = minnotespacing = 48;
-            }
             else if( args[i].equals( "-transpose") )
                 transposed = Integer.parseInt( args[++i] );
             else if( args[i].equals( "-wait") )
@@ -782,6 +844,8 @@ public class Piano {
                 maxnotesperstaff = Integer.parseInt( args[++i] );
             }
         }
+
+        notespacing = minnotespacing;
 
         PrintFile( "copyright.txt" );
 
@@ -952,6 +1016,7 @@ public class Piano {
         JLabel statslabel = new JLabel( "" );
 
         statslabel.setFont(new Font("SansSerif", Font.BOLD, 32));
+        statslabel.setText( "Piano Note Learner" );
 
         panel.add(button);
         panel.add(mbutton);
@@ -1175,7 +1240,7 @@ public class Piano {
             }
 
 
-            int nnn = chords[ggg][( chords[ggg][0][zzz][0] != -1 ) ? 0 : 1][zzz][0];     // only needed here for character input mode
+            int nnn = chords[ggg][( chords[ggg][0][zzz][0].note != -1 ) ? 0 : 1][zzz][0].note;     // only needed here for character input mode
             notenum = GetNoteNumber( nnn ) + sharpenorflatten[ nnn%7 ];           // only needed here for character input mode
 
 //            notew = staffx + notexstart/scaled + zzz*notespacing/scaled;
@@ -1251,7 +1316,7 @@ public class Piano {
                 notename = "";
                 for( int n=0; n<chords[ggg].length; n++ ) {    
                     for( int m=0; m<chords[ggg][n][zzz].length; m++ ) {
-                        noteno = chords[ggg][n][zzz][m];
+                        noteno = chords[ggg][n][zzz][m].note;
                         if( noteno == -1 ) continue;
                         notenum = GetNoteNumber( noteno ) + sharpenorflatten[ noteno%7 ];
                         for( int z2=0; z2<chordkeys; z2++ ) {
@@ -1296,7 +1361,12 @@ public class Piano {
             HighlightNote( bi, notew-(notespacing/(4*scaled)), grandy[ggg]-(3*linespace)/scaled, notespacing/scaled, (10*linespace+staffoffset)/scaled, true, 0xC0C0FF );
 
             if( was_error ) {
-                int[][] echord = { { -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 }, { -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 } };
+                noteval[][] echord = new noteval[2][16];
+                for( int iii=0; iii<echord.length; iii++ ) 
+                    for( int jjj=0; jjj<echord[0].length; jjj++ ) {
+                         echord[iii][jjj] = new noteval(); 
+//                         echord[iii][jjj].note = -1;
+                    }
                 int[][] esf = { { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } };
                 for( int nk=0; nk<chordkeys; nk++ ) {
                     int wn = miditonote[ gotchord[nk] ];
@@ -1305,7 +1375,7 @@ public class Piano {
                     //        if( wn > maxnoten[staffn] ) wn -= 7;
                     //        if( wn < minnoten[staffn] ) wn += 7;
                     if( wn >= 0 ) {
-                        echord[staffn][nk] = wn;
+                        echord[staffn][nk].note = wn;
                         if( miditonote[ gotchord[nk] ] == -1) esf[staffn][nk] = 1;
                     }
                 }
